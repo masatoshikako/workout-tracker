@@ -6,17 +6,21 @@
 <title>筋トレ管理</title>
 <style>
   :root {
-    --bg: #0f1418;
-    --surface: #1a2128;
-    --surface-2: #232c35;
-    --border: #2c3640;
-    --text: #e8edf2;
-    --text-dim: #8a96a3;
-    --accent: #ff7a3d;
-    --accent-dim: #cc5e26;
-    --success: #4ad295;
-    --danger: #ef5d5d;
-    --info: #5dabef;
+    --bg: #ffffff;
+    --surface: #f5f7fa;
+    --surface-2: #e8edf2;
+    --border: #d0d7de;
+    --text: #1a2027;
+    --text-dim: #5a6470;
+    --accent: #e85d1f;
+    --accent-dim: #c44a14;
+    --accent-bg: #fff1e8;
+    --success: #1f8a4f;
+    --success-bg: #e6f6ec;
+    --danger: #d12a2a;
+    --info: #1f6cb5;
+    --info-bg: #e6f0f9;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
 
   * { box-sizing: border-box; }
@@ -121,8 +125,8 @@
     color: var(--text-dim);
     padding: 4px 0;
   }
-  .cal-dow.sun { color: #e88; }
-  .cal-dow.sat { color: #8be; }
+  .cal-dow.sun { color: #d12a2a; }
+  .cal-dow.sat { color: #1f6cb5; }
   .cal-cell {
     aspect-ratio: 1;
     background: var(--surface);
@@ -201,7 +205,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.65);
+    background: rgba(20, 25, 30, 0.45);
     z-index: 100;
     display: flex;
     align-items: flex-end;
@@ -249,13 +253,17 @@
 
   /* Forms */
   label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text-dim); }
-  input[type="text"], input[type="number"], select, textarea {
+  input[type="text"], input[type="number"], input[type="password"], select, textarea {
     width: 100%;
-    background: var(--surface);
+    background: #fff;
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
   }
   input[type="number"] { -moz-appearance: textfield; }
   input::-webkit-outer-spin-button,
@@ -333,7 +341,8 @@
 
   /* Suggestion / previous boxes */
   .suggest-box {
-    background: var(--surface-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 12px;
     margin-bottom: 10px;
@@ -348,8 +357,67 @@
     font-weight: 700;
   }
   .suggest-box .value .accent { color: var(--accent); }
-  .suggest-box.prev { border-left: 3px solid var(--info); }
-  .suggest-box.next { border-left: 3px solid var(--success); }
+  .suggest-box.prev { background: var(--info-bg); border-color: #b9d4ee; }
+  .suggest-box.next { background: var(--accent-bg); border-color: #f5c8ad; }
+  .suggest-box.max { background: var(--success-bg); border-color: #b3e0c4; }
+
+  /* Proposal cards */
+  .prop-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .prop-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.1s, box-shadow 0.1s;
+  }
+  .prop-card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow);
+  }
+  .prop-card .lbl {
+    color: var(--text-dim);
+    font-size: 11px;
+    margin-bottom: 2px;
+  }
+  .prop-card .v {
+    font-weight: 700;
+    color: var(--accent);
+    font-size: 16px;
+  }
+
+  /* AI Feedback */
+  .fb-box {
+    background: #faf6ff;
+    border: 1px solid #d9c8f0;
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    color: var(--text);
+  }
+  .fb-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+  .fb-loading {
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 4px 0;
+  }
+  .fb-error {
+    color: var(--danger);
+    font-size: 13px;
+  }
 
   /* Logs list (day detail) */
   .log-item {
@@ -462,11 +530,14 @@ const WEIGHT_STEP = 2.5;
 let state = {
   exercises: [],
   logs: [],
+  settings: { apiKey: "", model: "claude-haiku-4-5" },
   view: "calendar",
   calMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },
   histExId: null,
   modal: null,
   formDraft: null,
+  fbLoading: {},
+  fbError: {},
 };
 
 // ========== Storage ==========
@@ -477,6 +548,7 @@ function load() {
     const data = JSON.parse(raw);
     state.exercises = data.exercises || [];
     state.logs = data.logs || [];
+    if (data.settings) Object.assign(state.settings, data.settings);
   } catch (e) {
     console.error("Failed to load:", e);
   }
@@ -485,6 +557,7 @@ function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     exercises: state.exercises,
     logs: state.logs,
+    settings: state.settings,
   }));
 }
 function seedDefaults() {
@@ -538,14 +611,32 @@ function lastLogBefore(exId, iso, excludeLogId) {
 function suggestNext(exId, iso, excludeLogId) {
   const last = lastLogBefore(exId, iso, excludeLogId);
   if (!last || !last.sets.length) return null;
-  const allHit = last.sets.every(s => s.reps >= TARGET_REPS);
   const baseW = last.sets[0].weight;
-  return allHit
-    ? { weight: +(baseW + WEIGHT_STEP).toFixed(2), reps: TARGET_REPS, allHit: true }
-    : { weight: baseW, reps: TARGET_REPS, allHit: false };
+  const baseR = last.sets[0].reps;
+  return {
+    addRep:    { weight: baseW, reps: baseR + 1, label: "+1レップ (同重量)" },
+    addWeight: { weight: +(baseW + WEIGHT_STEP).toFixed(2), reps: baseR, label: "+2.5kg (同レップ)" },
+    base: { weight: baseW, reps: baseR },
+  };
 }
 function maxWeight(sets) {
   return sets.reduce((m, s) => Math.max(m, +s.weight || 0), 0);
+}
+function maxRecord(exId, beforeDate) {
+  let best = null;
+  state.logs
+    .filter(l => l.exerciseId === exId && (!beforeDate || l.date <= beforeDate))
+    .forEach(l => {
+      l.sets.forEach(s => {
+        if (s.weight == null || s.reps == null) return;
+        if (!best
+            || s.weight > best.weight
+            || (s.weight === best.weight && s.reps > best.reps)) {
+          best = { weight: s.weight, reps: s.reps, date: l.date };
+        }
+      });
+    });
+  return best;
 }
 
 function el(tag, attrs, ...children) {
@@ -573,7 +664,8 @@ function renderTabs() {
   const items = [
     { id: "calendar",  label: "カレンダー" },
     { id: "history",   label: "履歴" },
-    { id: "exercises", label: "種目管理" },
+    { id: "exercises", label: "種目" },
+    { id: "settings",  label: "設定" },
   ];
   items.forEach(it => {
     tabs.appendChild(el("button", {
@@ -677,6 +769,7 @@ function renderDayDetail() {
           } }, "削除"),
         ),
       );
+      item.appendChild(renderFeedbackBlock(log));
       body.appendChild(item);
     });
   }
@@ -754,16 +847,34 @@ function renderLogForm() {
     }
     body.appendChild(prevBox);
 
+    const max = maxRecord(d.exerciseId, prev ? prev.date : null);
+    const maxBox = el("div", { class: "suggest-box max" });
+    maxBox.appendChild(el("div", { class: "label" }, "過去MAX"));
+    if (max) {
+      const valueLine = el("div", { class: "value" });
+      valueLine.appendChild(el("span", { class: "accent" }, `${max.weight}kg × ${max.reps}`));
+      maxBox.appendChild(valueLine);
+      maxBox.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" }, fmtDateJP(max.date)));
+    } else {
+      maxBox.appendChild(el("div", { class: "card-sub" }, "記録なし"));
+    }
+    body.appendChild(maxBox);
+
     const sug = suggestNext(d.exerciseId, d.date, d.logId);
     const sugBox = el("div", { class: "suggest-box next" });
-    sugBox.appendChild(el("div", { class: "label" }, "今回の提案"));
+    sugBox.appendChild(el("div", { class: "label" }, "今回の提案 (タップでセットへ追加)"));
     if (sug) {
-      const valueLine = el("div", { class: "value" });
-      valueLine.appendChild(document.createTextNode("目標 "));
-      valueLine.appendChild(el("span", { class: "accent" }, `${sug.weight}kg × ${sug.reps}`));
-      sugBox.appendChild(valueLine);
-      sugBox.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" },
-        sug.allHit ? "前回 全セット8回以上達成 → +2.5kg" : "前回 8回未達 → 同重量で再挑戦"));
+      const grid = el("div", { class: "prop-grid" });
+      [sug.addRep, sug.addWeight].forEach(p => {
+        const card = el("button", {
+          class: "prop-card",
+          onclick: () => applyProposal(p),
+        });
+        card.appendChild(el("div", { class: "lbl" }, p.label));
+        card.appendChild(el("div", { class: "v" }, `${p.weight}kg × ${p.reps}`));
+        grid.appendChild(card);
+      });
+      sugBox.appendChild(grid);
     } else {
       sugBox.appendChild(el("div", { class: "card-sub" }, "履歴がないため提案なし"));
     }
@@ -782,20 +893,26 @@ function renderLogForm() {
     table.appendChild(thead);
     const tbody = el("tbody");
     if (d.sets.length === 0) {
-      d.sets.push(sug
-        ? { weight: sug.weight, reps: sug.reps }
-        : { weight: 0, reps: TARGET_REPS });
+      d.sets.push({ weight: null, reps: null });
     }
     d.sets.forEach((s, i) => {
       const wInput = el("input", {
-        type: "number", step: "0.5", min: "0",
-        value: s.weight,
-        oninput: (e) => { d.sets[i].weight = parseFloat(e.target.value) || 0; },
+        type: "number", step: "0.5", min: "0", inputmode: "decimal",
+        placeholder: "重量",
+        value: s.weight == null ? "" : s.weight,
+        oninput: (e) => {
+          const v = e.target.value;
+          d.sets[i].weight = v === "" ? null : (parseFloat(v) || 0);
+        },
       });
       const rInput = el("input", {
-        type: "number", step: "1", min: "0",
-        value: s.reps,
-        oninput: (e) => { d.sets[i].reps = parseInt(e.target.value, 10) || 0; },
+        type: "number", step: "1", min: "0", inputmode: "numeric",
+        placeholder: "回数",
+        value: s.reps == null ? "" : s.reps,
+        oninput: (e) => {
+          const v = e.target.value;
+          d.sets[i].reps = v === "" ? null : (parseInt(v, 10) || 0);
+        },
       });
       tbody.appendChild(
         el("tr", null,
@@ -814,10 +931,10 @@ function renderLogForm() {
     body.appendChild(
       el("button", { class: "btn btn-sm", style: "margin-top:8px;",
         onclick: () => {
-          const last = d.sets[d.sets.length - 1];
+          const last = [...d.sets].reverse().find(s => s.weight != null || s.reps != null);
           d.sets.push(last
             ? { weight: last.weight, reps: last.reps }
-            : { weight: 0, reps: TARGET_REPS });
+            : { weight: null, reps: null });
           render();
         } }, "+ セットを追加"),
     );
@@ -850,11 +967,25 @@ function selectExercise(exId) {
   render();
 }
 
+function applyProposal(p) {
+  const d = state.formDraft;
+  // If only blank rows exist, fill the first; otherwise append a new row.
+  const allBlank = d.sets.every(s => s.weight == null && s.reps == null);
+  if (allBlank) {
+    d.sets = [{ weight: p.weight, reps: p.reps }];
+  } else {
+    d.sets.push({ weight: p.weight, reps: p.reps });
+  }
+  render();
+}
+
 function saveLogFromDraft() {
   const d = state.formDraft;
   if (!d.exerciseId) { alert("種目を選択してください"); return; }
-  const cleanSets = d.sets.filter(s => (s.weight > 0 || s.reps > 0));
-  if (cleanSets.length === 0) { alert("少なくとも1セット入力してください"); return; }
+  const cleanSets = d.sets
+    .filter(s => s.weight != null && s.reps != null && s.weight > 0 && s.reps > 0)
+    .map(s => ({ weight: s.weight, reps: s.reps }));
+  if (cleanSets.length === 0) { alert("重量と回数を両方入力したセットが1つ以上必要です"); return; }
   if (d.logId) {
     const i = state.logs.findIndex(l => l.id === d.logId);
     if (i >= 0) {
@@ -956,6 +1087,7 @@ function renderHistory() {
       card.appendChild(el("div", { class: "card-sub" }, txt));
       card.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" }, `最大 ${maxWeight(log.sets)}kg`));
       if (log.memo) card.appendChild(el("div", { class: "memo", style: "margin-top:6px;" }, log.memo));
+      card.appendChild(renderFeedbackBlock(log));
       wrap.appendChild(card);
     });
   }
@@ -993,11 +1125,11 @@ function buildChart(logs) {
     const line = document.createElementNS(svgNS, "line");
     line.setAttribute("x1", P); line.setAttribute("x2", W - P);
     line.setAttribute("y1", y); line.setAttribute("y2", y);
-    line.setAttribute("stroke", "#2c3640"); line.setAttribute("stroke-width", "1");
+    line.setAttribute("stroke", "#d0d7de"); line.setAttribute("stroke-width", "1");
     svg.appendChild(line);
     const t = document.createElementNS(svgNS, "text");
     t.setAttribute("x", 4); t.setAttribute("y", y + 4);
-    t.setAttribute("fill", "#8a96a3"); t.setAttribute("font-size", "10");
+    t.setAttribute("fill", "#5a6470"); t.setAttribute("font-size", "10");
     t.textContent = `${wVal}`;
     svg.appendChild(t);
   }
@@ -1005,7 +1137,7 @@ function buildChart(logs) {
   // Line
   const path = document.createElementNS(svgNS, "polyline");
   path.setAttribute("fill", "none");
-  path.setAttribute("stroke", "#ff7a3d");
+  path.setAttribute("stroke", "#e85d1f");
   path.setAttribute("stroke-width", "2");
   path.setAttribute("points", points.map((p, i) => `${xFor(i)},${yFor(p.w)}`).join(" "));
   svg.appendChild(path);
@@ -1015,12 +1147,12 @@ function buildChart(logs) {
   points.forEach((p, i) => {
     const c = document.createElementNS(svgNS, "circle");
     c.setAttribute("cx", xFor(i)); c.setAttribute("cy", yFor(p.w));
-    c.setAttribute("r", "3"); c.setAttribute("fill", "#ff7a3d");
+    c.setAttribute("r", "3"); c.setAttribute("fill", "#e85d1f");
     svg.appendChild(c);
     if (i % labelStep === 0 || i === points.length - 1) {
       const t = document.createElementNS(svgNS, "text");
       t.setAttribute("x", xFor(i)); t.setAttribute("y", H - 6);
-      t.setAttribute("fill", "#8a96a3");
+      t.setAttribute("fill", "#5a6470");
       t.setAttribute("font-size", "10"); t.setAttribute("text-anchor", "middle");
       t.textContent = fmtDateShort(p.date);
       svg.appendChild(t);
@@ -1089,6 +1221,171 @@ function renderExerciseManagement() {
   return wrap;
 }
 
+// ========== Settings ==========
+function renderSettings() {
+  const wrap = el("div");
+
+  const card = el("div", { class: "card" });
+  card.appendChild(el("div", { class: "card-title" }, "AIフィードバック設定"));
+  card.appendChild(el("div", { class: "card-sub", style: "margin-bottom:10px;" },
+    "Claude API キーを設定すると、トレーニング記録ごとに専門家AIから日本語のフィードバックを受け取れます。キーは端末内のみに保存され、外部に送信されません。"));
+
+  card.appendChild(el("label", null, "Anthropic API キー (sk-ant-... )"));
+  const keyInput = el("input", {
+    type: "password",
+    placeholder: state.settings.apiKey ? "(設定済み — 上書きする場合のみ入力)" : "sk-ant-...",
+    oninput: (e) => { state.settings.apiKey = e.target.value.trim(); },
+  });
+  card.appendChild(keyInput);
+
+  card.appendChild(el("label", { style: "margin-top:10px;" }, "モデル"));
+  const modelSel = el("select", {
+    onchange: (e) => { state.settings.model = e.target.value; },
+  });
+  [
+    { v: "claude-haiku-4-5",  l: "Claude Haiku 4.5 (高速・低コスト 推奨)" },
+    { v: "claude-sonnet-4-6", l: "Claude Sonnet 4.6 (バランス)" },
+    { v: "claude-opus-4-7",   l: "Claude Opus 4.7 (高品質・高コスト)" },
+  ].forEach(o => {
+    const opt = el("option", { value: o.v }, o.l);
+    if (state.settings.model === o.v) opt.setAttribute("selected", "selected");
+    modelSel.appendChild(opt);
+  });
+  card.appendChild(modelSel);
+
+  card.appendChild(el("button", {
+    class: "btn btn-primary btn-block", style: "margin-top:14px;",
+    onclick: () => { save(); alert("保存しました"); render(); },
+  }, "保存"));
+
+  if (state.settings.apiKey) {
+    card.appendChild(el("button", {
+      class: "btn btn-sm btn-danger", style: "margin-top:8px;",
+      onclick: () => {
+        if (!confirm("APIキーを削除しますか?")) return;
+        state.settings.apiKey = "";
+        save();
+        render();
+      },
+    }, "APIキーを削除"));
+  }
+  wrap.appendChild(card);
+
+  const info = el("div", { class: "card" });
+  info.appendChild(el("div", { class: "card-title" }, "APIキーの取得方法"));
+  info.appendChild(el("div", { class: "card-sub" },
+    "1. https://console.anthropic.com/ にアクセスしてアカウント作成"));
+  info.appendChild(el("div", { class: "card-sub" },
+    "2. 「API Keys」→ 「Create Key」"));
+  info.appendChild(el("div", { class: "card-sub" },
+    "3. 生成されたキー (sk-ant-... ) をコピーして上に貼り付け"));
+  info.appendChild(el("div", { class: "card-sub", style: "margin-top:8px;" },
+    "※ Haiku 4.5 で1回のフィードバックは数円以下です。月数百円の予算上限を設定することを推奨します。"));
+  wrap.appendChild(info);
+
+  return wrap;
+}
+
+// ========== AI Feedback ==========
+async function fetchAIFeedback(logId) {
+  const log = state.logs.find(l => l.id === logId);
+  if (!log) return;
+  const apiKey = state.settings.apiKey;
+  if (!apiKey) {
+    alert("先に「設定」タブで Anthropic API キーを設定してください");
+    state.view = "settings"; state.modal = null; render();
+    return;
+  }
+  const ex = getExercise(log.exerciseId);
+  const history = state.logs
+    .filter(l => l.exerciseId === log.exerciseId && l.id !== log.id && l.date <= log.date)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
+  const max = maxRecord(log.exerciseId, log.date);
+
+  const fmtSets = (sets) => sets.map((s, i) => `${i+1}: ${s.weight}kg × ${s.reps}回`).join(" / ");
+  const prompt = `あなたは筋肥大トレーニング指導の専門コーチです。以下の記録を踏まえ、200〜250文字程度で日本語の敬語フィードバックを返してください。
+評価軸:
+- 進捗（前回比、過去MAXとの比較）
+- 次回への具体的な提案（プログレッシブオーバーロード視点で重量/レップ/セット数）
+- フォームや疲労、休息に関する注意点（必要なら）
+励ましの一言も含めてください。マークダウン記号や見出しは不要、平文で。
+
+【種目】${ex ? ex.name : "(不明)"}（${ex ? ex.bodyPart : ""}）
+【日付】${log.date}
+【今日のセット】${fmtSets(log.sets)}
+【メモ】${log.memo || "なし"}
+
+【過去履歴 直近${history.length}回】
+${history.map(h => `${h.date}: ${fmtSets(h.sets)}`).join("\n") || "なし"}
+
+【過去MAX】${max ? `${max.weight}kg × ${max.reps}回 (${max.date})` : "未記録"}`;
+
+  state.fbLoading[logId] = true;
+  state.fbError[logId] = null;
+  render();
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: state.settings.model || "claude-haiku-4-5",
+        max_tokens: 600,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const text = (data.content || []).map(b => b.text || "").join("").trim();
+    if (!text) throw new Error("空のレスポンス");
+    log.feedback = text;
+    log.feedbackAt = new Date().toISOString();
+    log.feedbackModel = state.settings.model;
+    save();
+  } catch (e) {
+    state.fbError[logId] = e.message || String(e);
+  } finally {
+    state.fbLoading[logId] = false;
+    render();
+  }
+}
+
+function renderFeedbackBlock(log) {
+  const wrap = el("div");
+  if (state.fbLoading[log.id]) {
+    wrap.appendChild(el("div", { class: "fb-loading" }, "AIフィードバック取得中..."));
+    return wrap;
+  }
+  if (log.feedback) {
+    wrap.appendChild(el("div", { class: "fb-box" }, log.feedback));
+    wrap.appendChild(el("div", { class: "fb-meta" },
+      `AI: ${log.feedbackModel || ""} / ${log.feedbackAt ? new Date(log.feedbackAt).toLocaleString("ja-JP") : ""}`));
+    wrap.appendChild(el("button", {
+      class: "btn btn-sm", style: "margin-top:6px;",
+      onclick: () => fetchAIFeedback(log.id),
+    }, "再取得"));
+  } else {
+    wrap.appendChild(el("button", {
+      class: "btn btn-sm",
+      onclick: () => fetchAIFeedback(log.id),
+    }, "AIフィードバックをもらう"));
+  }
+  if (state.fbError[log.id]) {
+    wrap.appendChild(el("div", { class: "fb-error", style: "margin-top:6px;" },
+      `エラー: ${state.fbError[log.id]}`));
+  }
+  return wrap;
+}
+
 // ========== Render ==========
 function render() {
   renderTabs();
@@ -1097,6 +1394,7 @@ function render() {
   if (state.view === "calendar") app.appendChild(renderCalendar());
   else if (state.view === "history") app.appendChild(renderHistory());
   else if (state.view === "exercises") app.appendChild(renderExerciseManagement());
+  else if (state.view === "settings") app.appendChild(renderSettings());
   renderModal();
 }
 
