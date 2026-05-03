@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>筋トレ管理</title>
+<style>
+  :root {
+    --bg: #0f1418;
+    --surface: #1a2128;
+    --surface-2: #232c35;
+    --border: #2c3640;
+    --text: #e8edf2;
+    --text-dim: #8a96a3;
+    --accent: #ff7a3d;
+    --accent-dim: #cc5e26;
+    --success: #4ad295;
+    --danger: #ef5d5d;
+    --info: #5dabef;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button {
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    border: none;
+  }
+  input, select, textarea {
+    font-family: inherit;
+    font-size: inherit;
+  }
+
+  /* Layout */
+  .app {
+    max-width: 720px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+    border-bottom: 1px solid var(--border);
+  }
+  .title {
+    padding: 14px 16px 8px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .tabs {
+    display: flex;
+    gap: 0;
+  }
+  .tab {
+    flex: 1;
+    background: transparent;
+    color: var(--text-dim);
+    padding: 12px 8px;
+    border-bottom: 2px solid transparent;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  main {
+    flex: 1;
+    padding: 16px;
+  }
+
+  /* Calendar */
+  .cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .cal-nav {
+    background: var(--surface);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 18px;
+    min-width: 44px;
+  }
+  .cal-month {
+    font-weight: 700;
+    font-size: 18px;
+  }
+  .cal-today {
+    background: var(--surface);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  .cal-dow {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 4px 0;
+  }
+  .cal-dow.sun { color: #e88; }
+  .cal-dow.sat { color: #8be; }
+  .cal-cell {
+    aspect-ratio: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    font-size: 14px;
+    position: relative;
+    padding: 0;
+  }
+  .cal-cell.empty {
+    background: transparent;
+    border-color: transparent;
+  }
+  .cal-cell.today {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .cal-cell.has-logs::after {
+    content: "";
+    position: absolute;
+    bottom: 6px;
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .card-title {
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .card-sub {
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  /* Buttons */
+  .btn {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .btn-primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); }
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+  }
+  .btn-block { display: block; width: 100%; }
+  .btn-sm { padding: 6px 10px; font-size: 13px; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 100;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal {
+    background: var(--bg);
+    width: 100%;
+    max-width: 720px;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+  }
+  .modal-title {
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .modal-close {
+    background: transparent;
+    color: var(--text);
+    font-size: 22px;
+    padding: 0 8px;
+    line-height: 1;
+  }
+  .modal-body {
+    overflow-y: auto;
+    padding: 16px;
+  }
+  @media (min-width: 600px) {
+    .modal-overlay { align-items: center; }
+    .modal { border-radius: 16px; max-height: 88vh; }
+  }
+
+  /* Forms */
+  label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text-dim); }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+  }
+  input[type="number"] { -moz-appearance: textfield; }
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* Body part tabs */
+  .bp-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+  }
+  .bp-tab {
+    background: var(--surface);
+    color: var(--text-dim);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .bp-tab.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+  }
+
+  /* Exercise picker */
+  .ex-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .ex-btn {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: 10px;
+    text-align: left;
+    font-size: 14px;
+  }
+  .ex-btn.active {
+    border-color: var(--accent);
+    background: var(--surface-2);
+  }
+
+  /* Sets table */
+  .sets-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+  }
+  .sets-table th, .sets-table td {
+    padding: 6px 4px;
+    text-align: left;
+    font-size: 13px;
+  }
+  .sets-table th {
+    color: var(--text-dim);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+  }
+  .sets-table input[type="number"] {
+    padding: 8px;
+  }
+  .sets-table .col-num { width: 32px; color: var(--text-dim); }
+  .sets-table .col-act { width: 44px; text-align: center; }
+  .row-del {
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 18px;
+    padding: 4px 8px;
+  }
+
+  /* Suggestion / previous boxes */
+  .suggest-box {
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .suggest-box .label {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .suggest-box .value {
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .suggest-box .value .accent { color: var(--accent); }
+  .suggest-box.prev { border-left: 3px solid var(--info); }
+  .suggest-box.next { border-left: 3px solid var(--success); }
+
+  /* Logs list (day detail) */
+  .log-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .log-item .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .log-item .ex-name { font-weight: 700; }
+  .log-item .bp-pill {
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+  .log-item .sets {
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .log-item .actions { display: flex; gap: 8px; margin-top: 8px; }
+  .log-item .memo {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+  }
+
+  /* Exercise management */
+  .ex-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ex-list-item:last-child { border-bottom: none; }
+  .badge {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: 8px;
+  }
+
+  /* History chart */
+  .chart-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .chart-empty {
+    color: var(--text-dim);
+    text-align: center;
+    padding: 24px 0;
+  }
+  svg.chart {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .empty {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 24px 0;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title">筋トレ管理</div>
+    <nav class="tabs" id="tabs"></nav>
+  </header>
+  <main id="app"></main>
+</div>
+<div id="modal-root"></div>
+
+<script>
+"use strict";
+
+// ========== Constants ==========
+const STORAGE_KEY = "workoutTracker.v1";
+const BODY_PARTS = ["胸", "背中", "肩", "腕", "脚"];
+const DEFAULT_EXERCISES = {
+  "胸":   ["ベンチプレス", "インクラインダンベルプレス", "ダンベルフライ", "ディップス"],
+  "背中": ["デッドリフト", "ラットプルダウン", "ベントオーバーロウ", "シーテッドロウ"],
+  "肩":   ["ショルダープレス", "サイドレイズ", "リアレイズ", "フロントレイズ"],
+  "腕":   ["バーベルカール", "ダンベルカール", "トライセプスエクステンション", "ケーブルプッシュダウン"],
+  "脚":   ["スクワット", "レッグプレス", "レッグエクステンション", "レッグカール"],
+};
+const TARGET_REPS = 8;
+const WEIGHT_STEP = 2.5;
+
+// ========== State ==========
+let state = {
+  exercises: [],
+  logs: [],
+  view: "calendar",
+  calMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },
+  histExId: null,
+  modal: null,
+  formDraft: null,
+};
+
+// ========== Storage ==========
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    state.exercises = data.exercises || [];
+    state.logs = data.logs || [];
+  } catch (e) {
+    console.error("Failed to load:", e);
+  }
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    exercises: state.exercises,
+    logs: state.logs,
+  }));
+}
+function seedDefaults() {
+  const ex = [];
+  BODY_PARTS.forEach(bp => {
+    DEFAULT_EXERCISES[bp].forEach(name => {
+      ex.push({ id: uid("ex"), bodyPart: bp, name, isDefault: true });
+    });
+  });
+  state.exercises = ex;
+  save();
+}
+
+// ========== Helpers ==========
+function uid(prefix) {
+  const r = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36)).replace(/-/g, "").slice(0, 10);
+  return `${prefix}_${r}`;
+}
+function fmtDateISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function todayISO() { return fmtDateISO(new Date()); }
+function fmtDateJP(iso) {
+  const [y, m, d] = iso.split("-");
+  return `${y}年${parseInt(m, 10)}月${parseInt(d, 10)}日`;
+}
+function fmtDateShort(iso) {
+  const [, m, d] = iso.split("-");
+  return `${parseInt(m, 10)}/${parseInt(d, 10)}`;
+}
+function getExercise(id) { return state.exercises.find(e => e.id === id); }
+function exercisesByBodyPart(bp) {
+  return state.exercises.filter(e => e.bodyPart === bp);
+}
+function logsForDate(iso) {
+  return state.logs.filter(l => l.date === iso);
+}
+function logsForExercise(exId) {
+  return state.logs
+    .filter(l => l.exerciseId === exId)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+function lastLogBefore(exId, iso, excludeLogId) {
+  return state.logs
+    .filter(l => l.exerciseId === exId && l.date < iso && l.id !== excludeLogId)
+    .sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+}
+function suggestNext(exId, iso, excludeLogId) {
+  const last = lastLogBefore(exId, iso, excludeLogId);
+  if (!last || !last.sets.length) return null;
+  const allHit = last.sets.every(s => s.reps >= TARGET_REPS);
+  const baseW = last.sets[0].weight;
+  return allHit
+    ? { weight: +(baseW + WEIGHT_STEP).toFixed(2), reps: TARGET_REPS, allHit: true }
+    : { weight: baseW, reps: TARGET_REPS, allHit: false };
+}
+function maxWeight(sets) {
+  return sets.reduce((m, s) => Math.max(m, +s.weight || 0), 0);
+}
+
+function el(tag, attrs, ...children) {
+  const e = document.createElement(tag);
+  if (attrs) {
+    for (const k in attrs) {
+      if (k === "class") e.className = attrs[k];
+      else if (k === "style") e.setAttribute("style", attrs[k]);
+      else if (k.startsWith("on") && typeof attrs[k] === "function") e.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+      else if (k === "html") e.innerHTML = attrs[k];
+      else if (attrs[k] !== undefined && attrs[k] !== null) e.setAttribute(k, attrs[k]);
+    }
+  }
+  children.flat().forEach(c => {
+    if (c == null || c === false) return;
+    e.appendChild(typeof c === "string" || typeof c === "number" ? document.createTextNode(String(c)) : c);
+  });
+  return e;
+}
+
+// ========== Tabs ==========
+function renderTabs() {
+  const tabs = document.getElementById("tabs");
+  tabs.innerHTML = "";
+  const items = [
+    { id: "calendar",  label: "カレンダー" },
+    { id: "history",   label: "履歴" },
+    { id: "exercises", label: "種目管理" },
+  ];
+  items.forEach(it => {
+    tabs.appendChild(el("button", {
+      class: "tab" + (state.view === it.id ? " active" : ""),
+      onclick: () => { state.view = it.id; render(); },
+    }, it.label));
+  });
+}
+
+// ========== Calendar ==========
+function renderCalendar() {
+  const wrap = el("div");
+  const { y, m } = state.calMonth;
+
+  wrap.appendChild(
+    el("div", { class: "cal-header" },
+      el("button", { class: "cal-nav", onclick: () => { changeMonth(-1); } }, "◀"),
+      el("div", { class: "cal-month" }, `${y}年${m + 1}月`),
+      el("div", { style: "display:flex; gap:8px;" },
+        el("button", { class: "cal-today", onclick: () => { goToday(); } }, "今日"),
+        el("button", { class: "cal-nav", onclick: () => { changeMonth(1); } }, "▶"),
+      ),
+    ),
+  );
+
+  const grid = el("div", { class: "cal-grid" });
+  const dow = ["日", "月", "火", "水", "木", "金", "土"];
+  dow.forEach((d, i) => {
+    const cls = "cal-dow" + (i === 0 ? " sun" : i === 6 ? " sat" : "");
+    grid.appendChild(el("div", { class: cls }, d));
+  });
+
+  const first = new Date(y, m, 1);
+  const offset = first.getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const today = todayISO();
+
+  for (let i = 0; i < offset; i++) grid.appendChild(el("div", { class: "cal-cell empty" }));
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = fmtDateISO(new Date(y, m, d));
+    const has = logsForDate(iso).length > 0;
+    let cls = "cal-cell";
+    if (iso === today) cls += " today";
+    if (has) cls += " has-logs";
+    grid.appendChild(el("button", {
+      class: cls,
+      onclick: () => openDayDetail(iso),
+    }, String(d)));
+  }
+  wrap.appendChild(grid);
+
+  return wrap;
+}
+function changeMonth(delta) {
+  let { y, m } = state.calMonth;
+  m += delta;
+  if (m < 0) { m = 11; y--; }
+  if (m > 11) { m = 0; y++; }
+  state.calMonth = { y, m };
+  render();
+}
+function goToday() {
+  const t = new Date();
+  state.calMonth = { y: t.getFullYear(), m: t.getMonth() };
+  render();
+}
+
+// ========== Day Detail Modal ==========
+function openDayDetail(iso) {
+  state.modal = { type: "dayDetail", date: iso };
+  render();
+}
+function renderDayDetail() {
+  const iso = state.modal.date;
+  const logs = logsForDate(iso);
+  const body = el("div");
+
+  if (logs.length === 0) {
+    body.appendChild(el("div", { class: "empty" }, "この日の記録はありません"));
+  } else {
+    logs.forEach(log => {
+      const ex = getExercise(log.exerciseId);
+      const item = el("div", { class: "log-item" });
+      item.appendChild(
+        el("div", { class: "head" },
+          el("div", null,
+            el("span", { class: "ex-name" }, ex ? ex.name : "(不明な種目)"),
+            ex ? el("span", { class: "bp-pill" }, ex.bodyPart) : null,
+          ),
+          el("div", { class: "card-sub" }, `最大 ${maxWeight(log.sets)}kg`),
+        ),
+      );
+      const setsTxt = log.sets.map((s, i) => `${i + 1}: ${s.weight}kg × ${s.reps}`).join("  /  ");
+      item.appendChild(el("div", { class: "sets" }, setsTxt));
+      if (log.memo) item.appendChild(el("div", { class: "memo" }, log.memo));
+      item.appendChild(
+        el("div", { class: "actions" },
+          el("button", { class: "btn btn-sm", onclick: () => openLogForm(iso, log.id) }, "編集"),
+          el("button", { class: "btn btn-sm btn-danger", onclick: () => {
+            if (confirm("この記録を削除しますか?")) { deleteLog(log.id); }
+          } }, "削除"),
+        ),
+      );
+      body.appendChild(item);
+    });
+  }
+  body.appendChild(
+    el("button", { class: "btn btn-primary btn-block", style: "margin-top:8px;",
+      onclick: () => openLogForm(iso, null) }, "+ 種目を追加"),
+  );
+
+  return modalShell(fmtDateJP(iso), body);
+}
+
+// ========== Log Form Modal ==========
+function openLogForm(iso, logId) {
+  let draft;
+  if (logId) {
+    const log = state.logs.find(l => l.id === logId);
+    draft = {
+      logId,
+      date: log.date,
+      exerciseId: log.exerciseId,
+      bodyPart: getExercise(log.exerciseId)?.bodyPart || BODY_PARTS[0],
+      sets: log.sets.map(s => ({ weight: s.weight, reps: s.reps })),
+      memo: log.memo || "",
+    };
+  } else {
+    draft = {
+      logId: null,
+      date: iso,
+      exerciseId: null,
+      bodyPart: BODY_PARTS[0],
+      sets: [],
+      memo: "",
+    };
+  }
+  state.formDraft = draft;
+  state.modal = { type: "logForm" };
+  render();
+}
+function renderLogForm() {
+  const d = state.formDraft;
+  const body = el("div");
+
+  const bpRow = el("div", { class: "bp-tabs" });
+  BODY_PARTS.forEach(bp => {
+    bpRow.appendChild(el("button", {
+      class: "bp-tab" + (d.bodyPart === bp ? " active" : ""),
+      onclick: () => { d.bodyPart = bp; render(); },
+    }, bp));
+  });
+  body.appendChild(bpRow);
+
+  body.appendChild(el("label", null, "種目を選択"));
+  const exGrid = el("div", { class: "ex-grid" });
+  exercisesByBodyPart(d.bodyPart).forEach(ex => {
+    exGrid.appendChild(el("button", {
+      class: "ex-btn" + (d.exerciseId === ex.id ? " active" : ""),
+      onclick: () => selectExercise(ex.id),
+    }, ex.name));
+  });
+  if (exercisesByBodyPart(d.bodyPart).length === 0) {
+    exGrid.appendChild(el("div", { class: "card-sub" }, "この部位に種目がありません"));
+  }
+  body.appendChild(exGrid);
+
+  if (d.exerciseId) {
+    const prev = lastLogBefore(d.exerciseId, d.date, d.logId);
+    const prevBox = el("div", { class: "suggest-box prev" });
+    prevBox.appendChild(el("div", { class: "label" }, "前回の記録"));
+    if (prev) {
+      const txt = prev.sets.map((s, i) => `${i + 1}: ${s.weight}kg × ${s.reps}`).join("  /  ");
+      prevBox.appendChild(el("div", { class: "value" }, fmtDateJP(prev.date)));
+      prevBox.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" }, txt));
+    } else {
+      prevBox.appendChild(el("div", { class: "card-sub" }, "履歴なし"));
+    }
+    body.appendChild(prevBox);
+
+    const sug = suggestNext(d.exerciseId, d.date, d.logId);
+    const sugBox = el("div", { class: "suggest-box next" });
+    sugBox.appendChild(el("div", { class: "label" }, "今回の提案"));
+    if (sug) {
+      const valueLine = el("div", { class: "value" });
+      valueLine.appendChild(document.createTextNode("目標 "));
+      valueLine.appendChild(el("span", { class: "accent" }, `${sug.weight}kg × ${sug.reps}`));
+      sugBox.appendChild(valueLine);
+      sugBox.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" },
+        sug.allHit ? "前回 全セット8回以上達成 → +2.5kg" : "前回 8回未達 → 同重量で再挑戦"));
+    } else {
+      sugBox.appendChild(el("div", { class: "card-sub" }, "履歴がないため提案なし"));
+    }
+    body.appendChild(sugBox);
+
+    body.appendChild(el("label", null, "セット (重量kg / 回数)"));
+    const table = el("table", { class: "sets-table" });
+    const thead = el("thead", null,
+      el("tr", null,
+        el("th", { class: "col-num" }, "#"),
+        el("th", null, "重量(kg)"),
+        el("th", null, "回数"),
+        el("th", { class: "col-act" }, ""),
+      ),
+    );
+    table.appendChild(thead);
+    const tbody = el("tbody");
+    if (d.sets.length === 0) {
+      d.sets.push(sug
+        ? { weight: sug.weight, reps: sug.reps }
+        : { weight: 0, reps: TARGET_REPS });
+    }
+    d.sets.forEach((s, i) => {
+      const wInput = el("input", {
+        type: "number", step: "0.5", min: "0",
+        value: s.weight,
+        oninput: (e) => { d.sets[i].weight = parseFloat(e.target.value) || 0; },
+      });
+      const rInput = el("input", {
+        type: "number", step: "1", min: "0",
+        value: s.reps,
+        oninput: (e) => { d.sets[i].reps = parseInt(e.target.value, 10) || 0; },
+      });
+      tbody.appendChild(
+        el("tr", null,
+          el("td", { class: "col-num" }, String(i + 1)),
+          el("td", null, wInput),
+          el("td", null, rInput),
+          el("td", { class: "col-act" },
+            el("button", { class: "row-del", onclick: () => { d.sets.splice(i, 1); render(); } }, "×"),
+          ),
+        ),
+      );
+    });
+    table.appendChild(tbody);
+    body.appendChild(table);
+
+    body.appendChild(
+      el("button", { class: "btn btn-sm", style: "margin-top:8px;",
+        onclick: () => {
+          const last = d.sets[d.sets.length - 1];
+          d.sets.push(last
+            ? { weight: last.weight, reps: last.reps }
+            : { weight: 0, reps: TARGET_REPS });
+          render();
+        } }, "+ セットを追加"),
+    );
+
+    body.appendChild(el("label", { style: "margin-top:14px;" }, "メモ (任意)"));
+    body.appendChild(el("textarea", {
+      rows: "2",
+      placeholder: "感触、フォーム、調子など",
+      oninput: (e) => { d.memo = e.target.value; },
+    }, d.memo));
+
+    body.appendChild(
+      el("button", {
+        class: "btn btn-primary btn-block",
+        style: "margin-top:14px;",
+        onclick: saveLogFromDraft,
+      }, d.logId ? "更新" : "保存"),
+    );
+  }
+
+  const titleText = d.logId ? `編集 (${fmtDateShort(d.date)})` : `記録 (${fmtDateShort(d.date)})`;
+  return modalShell(titleText, body, () => { state.modal = { type: "dayDetail", date: d.date }; });
+}
+
+function selectExercise(exId) {
+  const d = state.formDraft;
+  if (d.exerciseId === exId) return;
+  d.exerciseId = exId;
+  d.sets = [];
+  render();
+}
+
+function saveLogFromDraft() {
+  const d = state.formDraft;
+  if (!d.exerciseId) { alert("種目を選択してください"); return; }
+  const cleanSets = d.sets.filter(s => (s.weight > 0 || s.reps > 0));
+  if (cleanSets.length === 0) { alert("少なくとも1セット入力してください"); return; }
+  if (d.logId) {
+    const i = state.logs.findIndex(l => l.id === d.logId);
+    if (i >= 0) {
+      state.logs[i] = { ...state.logs[i], exerciseId: d.exerciseId, sets: cleanSets, memo: d.memo };
+    }
+  } else {
+    state.logs.push({
+      id: uid("log"),
+      date: d.date,
+      exerciseId: d.exerciseId,
+      sets: cleanSets,
+      memo: d.memo,
+    });
+  }
+  save();
+  state.modal = { type: "dayDetail", date: d.date };
+  state.formDraft = null;
+  render();
+}
+
+function deleteLog(id) {
+  state.logs = state.logs.filter(l => l.id !== id);
+  save();
+  render();
+}
+
+// ========== Modal Shell ==========
+function modalShell(title, body, onClose) {
+  const close = () => {
+    if (onClose) onClose(); else state.modal = null;
+    state.formDraft = null;
+    render();
+  };
+  const overlay = el("div", { class: "modal-overlay",
+    onclick: (e) => { if (e.target === e.currentTarget) close(); } });
+  overlay.appendChild(
+    el("div", { class: "modal" },
+      el("div", { class: "modal-header" },
+        el("div", { class: "modal-title" }, title),
+        el("button", { class: "modal-close", onclick: close }, "×"),
+      ),
+      el("div", { class: "modal-body" }, body),
+    ),
+  );
+  return overlay;
+}
+
+function renderModal() {
+  const root = document.getElementById("modal-root");
+  root.innerHTML = "";
+  if (!state.modal) { document.body.style.overflow = ""; return; }
+  document.body.style.overflow = "hidden";
+  if (state.modal.type === "dayDetail") root.appendChild(renderDayDetail());
+  else if (state.modal.type === "logForm") root.appendChild(renderLogForm());
+}
+
+// ========== History ==========
+function renderHistory() {
+  const wrap = el("div");
+
+  const allEx = [...state.exercises].sort((a, b) => {
+    const bp = BODY_PARTS.indexOf(a.bodyPart) - BODY_PARTS.indexOf(b.bodyPart);
+    return bp !== 0 ? bp : a.name.localeCompare(b.name);
+  });
+  if (!state.histExId && allEx.length) state.histExId = allEx[0].id;
+
+  const sel = el("select", {
+    onchange: (e) => { state.histExId = e.target.value; render(); },
+  });
+  BODY_PARTS.forEach(bp => {
+    const group = el("optgroup", { label: bp });
+    state.exercises.filter(e => e.bodyPart === bp).forEach(ex => {
+      const opt = el("option", { value: ex.id }, ex.name);
+      if (ex.id === state.histExId) opt.setAttribute("selected", "selected");
+      group.appendChild(opt);
+    });
+    if (group.children.length) sel.appendChild(group);
+  });
+  wrap.appendChild(el("label", null, "種目"));
+  wrap.appendChild(sel);
+
+  const logs = logsForExercise(state.histExId);
+  const chartWrap = el("div", { class: "chart-wrap", style: "margin-top:12px;" });
+  chartWrap.appendChild(el("div", { class: "card-sub", style: "margin-bottom:6px;" }, "最大重量の推移"));
+  if (logs.length === 0) {
+    chartWrap.appendChild(el("div", { class: "chart-empty" }, "記録がありません"));
+  } else {
+    chartWrap.appendChild(buildChart(logs));
+  }
+  wrap.appendChild(chartWrap);
+
+  if (logs.length === 0) {
+    wrap.appendChild(el("div", { class: "empty" }, "記録がまだありません"));
+  } else {
+    [...logs].reverse().forEach(log => {
+      const card = el("div", { class: "card" });
+      card.appendChild(el("div", { class: "card-title" }, fmtDateJP(log.date)));
+      const txt = log.sets.map((s, i) => `${i + 1}: ${s.weight}kg × ${s.reps}`).join("  /  ");
+      card.appendChild(el("div", { class: "card-sub" }, txt));
+      card.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" }, `最大 ${maxWeight(log.sets)}kg`));
+      if (log.memo) card.appendChild(el("div", { class: "memo", style: "margin-top:6px;" }, log.memo));
+      wrap.appendChild(card);
+    });
+  }
+
+  return wrap;
+}
+
+function buildChart(logs) {
+  const W = 600, H = 180, P = 30;
+  const points = logs.map(l => ({ date: l.date, w: maxWeight(l.sets) }));
+  const ws = points.map(p => p.w);
+  const minW = Math.min(...ws);
+  const maxW = Math.max(...ws);
+  const range = maxW - minW || 1;
+  const yPad = range * 0.15 || 1;
+  const yMin = Math.max(0, Math.floor(minW - yPad));
+  const yMax = Math.ceil(maxW + yPad);
+  const yRange = yMax - yMin || 1;
+  const innerW = W - P * 2;
+  const innerH = H - P * 2;
+
+  const xFor = (i) => points.length === 1 ? P + innerW / 2 : P + (i / (points.length - 1)) * innerW;
+  const yFor = (w) => P + innerH - ((w - yMin) / yRange) * innerH;
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("class", "chart");
+  svg.setAttribute("preserveAspectRatio", "none");
+
+  // Y grid (3 lines)
+  for (let i = 0; i <= 3; i++) {
+    const y = P + (i / 3) * innerH;
+    const wVal = Math.round(yMax - (i / 3) * yRange);
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", P); line.setAttribute("x2", W - P);
+    line.setAttribute("y1", y); line.setAttribute("y2", y);
+    line.setAttribute("stroke", "#2c3640"); line.setAttribute("stroke-width", "1");
+    svg.appendChild(line);
+    const t = document.createElementNS(svgNS, "text");
+    t.setAttribute("x", 4); t.setAttribute("y", y + 4);
+    t.setAttribute("fill", "#8a96a3"); t.setAttribute("font-size", "10");
+    t.textContent = `${wVal}`;
+    svg.appendChild(t);
+  }
+
+  // Line
+  const path = document.createElementNS(svgNS, "polyline");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "#ff7a3d");
+  path.setAttribute("stroke-width", "2");
+  path.setAttribute("points", points.map((p, i) => `${xFor(i)},${yFor(p.w)}`).join(" "));
+  svg.appendChild(path);
+
+  // Points + x labels (sparse)
+  const labelStep = Math.max(1, Math.ceil(points.length / 6));
+  points.forEach((p, i) => {
+    const c = document.createElementNS(svgNS, "circle");
+    c.setAttribute("cx", xFor(i)); c.setAttribute("cy", yFor(p.w));
+    c.setAttribute("r", "3"); c.setAttribute("fill", "#ff7a3d");
+    svg.appendChild(c);
+    if (i % labelStep === 0 || i === points.length - 1) {
+      const t = document.createElementNS(svgNS, "text");
+      t.setAttribute("x", xFor(i)); t.setAttribute("y", H - 6);
+      t.setAttribute("fill", "#8a96a3");
+      t.setAttribute("font-size", "10"); t.setAttribute("text-anchor", "middle");
+      t.textContent = fmtDateShort(p.date);
+      svg.appendChild(t);
+    }
+  });
+
+  return svg;
+}
+
+// ========== Exercise Management ==========
+function renderExerciseManagement() {
+  const wrap = el("div");
+
+  const card = el("div", { class: "card" });
+  card.appendChild(el("div", { class: "card-title" }, "種目を追加"));
+  let newBp = BODY_PARTS[0];
+  let newName = "";
+  const bpSel = el("select", { onchange: (e) => { newBp = e.target.value; } });
+  BODY_PARTS.forEach(bp => bpSel.appendChild(el("option", { value: bp }, bp)));
+  const nameInput = el("input", {
+    type: "text", placeholder: "例: ナロウベンチプレス",
+    oninput: (e) => { newName = e.target.value; },
+  });
+  const submitBtn = el("button", { class: "btn btn-primary", onclick: () => {
+    if (!newName.trim()) { alert("種目名を入力してください"); return; }
+    state.exercises.push({ id: uid("ex"), bodyPart: newBp, name: newName.trim(), isDefault: false });
+    save();
+    render();
+  } }, "追加");
+  card.appendChild(el("div", { class: "row", style: "margin-bottom:8px;" }, bpSel, nameInput));
+  card.appendChild(submitBtn);
+  wrap.appendChild(card);
+
+  BODY_PARTS.forEach(bp => {
+    const list = state.exercises.filter(e => e.bodyPart === bp);
+    if (list.length === 0) return;
+    const c = el("div", { class: "card" });
+    c.appendChild(el("div", { class: "card-title" }, bp));
+    list.forEach(ex => {
+      const item = el("div", { class: "ex-list-item" });
+      const nameWrap = el("div", null, ex.name);
+      if (ex.isDefault) nameWrap.appendChild(el("span", { class: "badge" }, "デフォルト"));
+      item.appendChild(nameWrap);
+      if (!ex.isDefault) {
+        item.appendChild(el("button", {
+          class: "btn btn-sm btn-danger",
+          onclick: () => {
+            const used = state.logs.some(l => l.exerciseId === ex.id);
+            const msg = used
+              ? `「${ex.name}」を削除すると、関連する記録も削除されます。よろしいですか?`
+              : `「${ex.name}」を削除しますか?`;
+            if (!confirm(msg)) return;
+            state.exercises = state.exercises.filter(e => e.id !== ex.id);
+            state.logs = state.logs.filter(l => l.exerciseId !== ex.id);
+            if (state.histExId === ex.id) state.histExId = null;
+            save();
+            render();
+          },
+        }, "削除"));
+      }
+      c.appendChild(item);
+    });
+    wrap.appendChild(c);
+  });
+
+  return wrap;
+}
+
+// ========== Render ==========
+function render() {
+  renderTabs();
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  if (state.view === "calendar") app.appendChild(renderCalendar());
+  else if (state.view === "history") app.appendChild(renderHistory());
+  else if (state.view === "exercises") app.appendChild(renderExerciseManagement());
+  renderModal();
+}
+
+// ========== Init ==========
+load();
+if (state.exercises.length === 0) seedDefaults();
+render();
+</script>
+</body>
+</html>
