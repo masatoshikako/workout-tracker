@@ -1643,9 +1643,24 @@ function startTimer() {
       notifyTimerEnd();
       return;
     }
-    render();
+    // Avoid full render on every tick: it would reset modal scroll & input focus on mobile.
+    updateTimerDisplay();
   }, 1000);
   render();
+}
+
+function updateTimerDisplay() {
+  const t = state.timer;
+  const urgent = t.remaining <= 10 && t.running;
+  if (t._displayEl) {
+    t._displayEl.textContent = fmtTimer(t.remaining);
+    t._displayEl.classList.toggle("urgent", urgent);
+  }
+  if (t._barEl) {
+    const pct = t.duration > 0 ? Math.max(0, Math.min(100, (t.remaining / t.duration) * 100)) : 0;
+    t._barEl.style.width = pct + "%";
+    t._barEl.classList.toggle("urgent", urgent);
+  }
 }
 
 function stopTimer() {
@@ -1711,19 +1726,23 @@ function renderTimerBox() {
   customRow.appendChild(customBtn);
   box.appendChild(customRow);
 
-  // Timer display
+  // Timer display (ref kept on state so per-second ticks can update it without full render)
   const urgent = t.remaining <= 10 && t.running;
-  box.appendChild(el("div", {
+  const displayEl = el("div", {
     class: "timer-display" + (urgent ? " urgent" : ""),
-  }, fmtTimer(t.remaining)));
+  }, fmtTimer(t.remaining));
+  t._displayEl = displayEl;
+  box.appendChild(displayEl);
 
   // Progress bar
   const pct = t.duration > 0 ? Math.max(0, Math.min(100, (t.remaining / t.duration) * 100)) : 0;
   const barWrap = el("div", { class: "timer-bar-wrap" });
-  barWrap.appendChild(el("div", {
+  const barEl = el("div", {
     class: "timer-bar" + (urgent ? " urgent" : ""),
     style: `width:${pct}%;`,
-  }));
+  });
+  t._barEl = barEl;
+  barWrap.appendChild(barEl);
   box.appendChild(barWrap);
 
   // Controls
