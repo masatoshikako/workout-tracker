@@ -295,7 +295,7 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
-    margin-bottom: 16px;
+    margin-bottom: 4px;
   }
   .ex-btn {
     background: var(--surface);
@@ -464,12 +464,26 @@
     align-items: center;
     padding: 10px 12px;
     border-bottom: 1px solid var(--border);
+    gap: 8px;
   }
   .ex-list-item:last-child { border-bottom: none; }
   .badge {
     font-size: 11px;
     color: var(--text-dim);
     margin-left: 8px;
+  }
+  .ex-list-edit {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+  }
+  .ex-list-edit input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 14px;
   }
 
   /* History chart */
@@ -498,6 +512,109 @@
     color: var(--text-dim);
     padding: 24px 0;
   }
+
+  /* Day summary bar */
+  .summary-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    gap: 20px;
+    margin-bottom: 12px;
+  }
+  .summary-bar .s-item { display: flex; flex-direction: column; }
+  .summary-bar .s-lbl { font-size: 11px; color: var(--text-dim); }
+  .summary-bar .s-val { font-size: 15px; font-weight: 700; }
+
+  /* Inline exercise add in log form */
+  .ex-inline-add {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    margin-bottom: 12px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+  }
+  .ex-inline-add input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px;
+    font-size: 14px;
+  }
+
+  /* Interval timer */
+  .timer-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    margin: 12px 0;
+  }
+  .timer-presets {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .timer-preset {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .timer-preset.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .timer-custom-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .timer-custom-row input[type="number"] {
+    width: auto;
+    flex: 1;
+    min-width: 70px;
+    max-width: 110px;
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+  .timer-display {
+    font-size: 38px;
+    font-weight: 700;
+    text-align: center;
+    margin: 8px 0 6px;
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+  }
+  .timer-display.urgent { color: var(--danger); }
+  .timer-bar-wrap {
+    background: var(--surface-2);
+    border-radius: 4px;
+    height: 6px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .timer-bar {
+    background: var(--accent);
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.8s linear;
+  }
+  .timer-bar.urgent { background: var(--danger); }
+  .timer-controls {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
 </style>
 </head>
 <body>
@@ -523,8 +640,8 @@ const DEFAULT_EXERCISES = {
   "腕":   ["バーベルカール", "ダンベルカール", "トライセプスエクステンション", "ケーブルプッシュダウン"],
   "脚":   ["スクワット", "レッグプレス", "レッグエクステンション", "レッグカール"],
 };
-const TARGET_REPS = 8;
 const WEIGHT_STEP = 2.5;
+const TIMER_PRESETS = [60, 90, 120, 180];
 
 // ========== State ==========
 let state = {
@@ -538,6 +655,13 @@ let state = {
   formDraft: null,
   fbLoading: {},
   fbError: {},
+  editingExId: null,
+  timer: {
+    running: false,
+    remaining: 90,
+    duration: 90,
+    intervalId: null,
+  },
 };
 
 // ========== Storage ==========
@@ -549,6 +673,14 @@ function load() {
     state.exercises = data.exercises || [];
     state.logs = data.logs || [];
     if (data.settings) Object.assign(state.settings, data.settings);
+    // Migration: assign order field to exercises that don't have one
+    const bpCounters = {};
+    state.exercises.forEach(ex => {
+      if (ex.order == null) {
+        bpCounters[ex.bodyPart] = (bpCounters[ex.bodyPart] ?? 0);
+        ex.order = bpCounters[ex.bodyPart]++;
+      }
+    });
   } catch (e) {
     console.error("Failed to load:", e);
   }
@@ -563,8 +695,8 @@ function save() {
 function seedDefaults() {
   const ex = [];
   BODY_PARTS.forEach(bp => {
-    DEFAULT_EXERCISES[bp].forEach(name => {
-      ex.push({ id: uid("ex"), bodyPart: bp, name, isDefault: true });
+    DEFAULT_EXERCISES[bp].forEach((name, idx) => {
+      ex.push({ id: uid("ex"), bodyPart: bp, name, isDefault: true, order: idx });
     });
   });
   state.exercises = ex;
@@ -593,7 +725,9 @@ function fmtDateShort(iso) {
 }
 function getExercise(id) { return state.exercises.find(e => e.id === id); }
 function exercisesByBodyPart(bp) {
-  return state.exercises.filter(e => e.bodyPart === bp);
+  return state.exercises
+    .filter(e => e.bodyPart === bp)
+    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 }
 function logsForDate(iso) {
   return state.logs.filter(l => l.date === iso);
@@ -611,8 +745,10 @@ function lastLogBefore(exId, iso, excludeLogId) {
 function suggestNext(exId, iso, excludeLogId) {
   const last = lastLogBefore(exId, iso, excludeLogId);
   if (!last || !last.sets.length) return null;
-  const baseW = last.sets[0].weight;
-  const baseR = last.sets[0].reps;
+  const validSets = last.sets.filter(s => s.weight != null && s.reps != null && s.weight > 0 && s.reps > 0);
+  if (!validSets.length) return null;
+  const baseW = validSets[0].weight;
+  const baseR = validSets[0].reps;
   return {
     addRep:    { weight: baseW, reps: baseR + 1, label: "+1レップ (同重量)" },
     addWeight: { weight: +(baseW + WEIGHT_STEP).toFixed(2), reps: baseR, label: "+2.5kg (同レップ)" },
@@ -743,23 +879,51 @@ function renderDayDetail() {
   const logs = logsForDate(iso);
   const body = el("div");
 
+  // Summary bar (valid sets only: weight > 0 && reps > 0)
+  if (logs.length > 0) {
+    const validSetsFn = (log) => log.sets.filter(s => (s.weight > 0) && (s.reps > 0));
+    const totalSets = logs.reduce((sum, l) => sum + validSetsFn(l).length, 0);
+    const totalVolume = logs.reduce((sum, l) =>
+      sum + l.sets.reduce((s2, s) =>
+        (s.weight > 0 && s.reps > 0) ? s2 + s.weight * s.reps : s2, 0), 0);
+    if (totalSets > 0) {
+      const bar = el("div", { class: "summary-bar" });
+      const si = el("div", { class: "s-item" });
+      si.appendChild(el("div", { class: "s-lbl" }, "総セット数"));
+      si.appendChild(el("div", { class: "s-val" }, `${totalSets}セット`));
+      const vi = el("div", { class: "s-item" });
+      vi.appendChild(el("div", { class: "s-lbl" }, "総ボリューム"));
+      vi.appendChild(el("div", { class: "s-val" }, `${totalVolume.toLocaleString("ja-JP")}kg`));
+      bar.appendChild(si);
+      bar.appendChild(vi);
+      body.appendChild(bar);
+    }
+  }
+
   if (logs.length === 0) {
     body.appendChild(el("div", { class: "empty" }, "この日の記録はありません"));
   } else {
     logs.forEach(log => {
       const ex = getExercise(log.exerciseId);
       const item = el("div", { class: "log-item" });
+      const validSets = log.sets.filter(s => s.weight > 0 && s.reps > 0).length;
       item.appendChild(
         el("div", { class: "head" },
           el("div", null,
             el("span", { class: "ex-name" }, ex ? ex.name : "(不明な種目)"),
             ex ? el("span", { class: "bp-pill" }, ex.bodyPart) : null,
           ),
-          el("div", { class: "card-sub" }, `最大 ${maxWeight(log.sets)}kg`),
+          el("div", { class: "card-sub" }, `${validSets}セット / 最大 ${maxWeight(log.sets)}kg`),
         ),
       );
-      const setsTxt = log.sets.map((s, i) => `${i + 1}: ${s.weight}kg × ${s.reps}`).join("  /  ");
-      item.appendChild(el("div", { class: "sets" }, setsTxt));
+      const setsTxt = log.sets
+        .map((s, i) => {
+          if (s.weight == null && s.reps == null) return null;
+          return `${i + 1}: ${s.weight ?? "-"}kg × ${s.reps ?? "-"}`;
+        })
+        .filter(Boolean)
+        .join("  /  ");
+      item.appendChild(el("div", { class: "sets" }, setsTxt || "セットなし"));
       if (log.memo) item.appendChild(el("div", { class: "memo" }, log.memo));
       item.appendChild(
         el("div", { class: "actions" },
@@ -834,14 +998,38 @@ function renderLogForm() {
   }
   body.appendChild(exGrid);
 
+  // Inline exercise add: reads DOM value at click time (no closure variable issue)
+  const inlineWrap = el("div", { class: "ex-inline-add" });
+  const inlineInput = el("input", { type: "text", placeholder: "新しい種目名を追加..." });
+  const inlineAddBtn = el("button", {
+    class: "btn btn-sm",
+    onclick: () => {
+      const name = inlineInput.value.trim();
+      if (!name) return;
+      const newOrder = exercisesByBodyPart(d.bodyPart).length;
+      const newEx = { id: uid("ex"), bodyPart: d.bodyPart, name, isDefault: false, order: newOrder };
+      state.exercises.push(newEx);
+      save();
+      d.exerciseId = newEx.id;
+      d.sets = Array.from({ length: 4 }, () => ({ weight: null, reps: null }));
+      render();
+    },
+  }, "+ 追加");
+  inlineWrap.appendChild(inlineInput);
+  inlineWrap.appendChild(inlineAddBtn);
+  body.appendChild(inlineWrap);
+
   if (d.exerciseId) {
     const prev = lastLogBefore(d.exerciseId, d.date, d.logId);
     const prevBox = el("div", { class: "suggest-box prev" });
     prevBox.appendChild(el("div", { class: "label" }, "前回の記録"));
     if (prev) {
-      const txt = prev.sets.map((s, i) => `${i + 1}: ${s.weight}kg × ${s.reps}`).join("  /  ");
+      const txt = prev.sets
+        .filter(s => s.weight != null || s.reps != null)
+        .map((s, i) => `${i + 1}: ${s.weight ?? "-"}kg × ${s.reps ?? "-"}`)
+        .join("  /  ");
       prevBox.appendChild(el("div", { class: "value" }, fmtDateJP(prev.date)));
-      prevBox.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" }, txt));
+      prevBox.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" }, txt || "セットなし"));
     } else {
       prevBox.appendChild(el("div", { class: "card-sub" }, "履歴なし"));
     }
@@ -893,7 +1081,7 @@ function renderLogForm() {
     table.appendChild(thead);
     const tbody = el("tbody");
     if (d.sets.length === 0) {
-      d.sets.push({ weight: null, reps: null });
+      for (let i = 0; i < 4; i++) d.sets.push({ weight: null, reps: null });
     }
     d.sets.forEach((s, i) => {
       const wInput = el("input", {
@@ -939,7 +1127,10 @@ function renderLogForm() {
         } }, "+ セットを追加"),
     );
 
-    body.appendChild(el("label", { style: "margin-top:14px;" }, "メモ (任意)"));
+    // Interval timer (between sets table and memo)
+    body.appendChild(renderTimerBox());
+
+    body.appendChild(el("label", { style: "margin-top:6px;" }, "メモ (任意)"));
     body.appendChild(el("textarea", {
       rows: "2",
       placeholder: "感触、フォーム、調子など",
@@ -963,13 +1154,12 @@ function selectExercise(exId) {
   const d = state.formDraft;
   if (d.exerciseId === exId) return;
   d.exerciseId = exId;
-  d.sets = [];
+  d.sets = Array.from({ length: 4 }, () => ({ weight: null, reps: null }));
   render();
 }
 
 function applyProposal(p) {
   const d = state.formDraft;
-  // If only blank rows exist, fill the first; otherwise append a new row.
   const allBlank = d.sets.every(s => s.weight == null && s.reps == null);
   if (allBlank) {
     d.sets = [{ weight: p.weight, reps: p.reps }];
@@ -982,10 +1172,10 @@ function applyProposal(p) {
 function saveLogFromDraft() {
   const d = state.formDraft;
   if (!d.exerciseId) { alert("種目を選択してください"); return; }
+  // Allow blank sets: keep rows where at least one of weight/reps is entered
   const cleanSets = d.sets
-    .filter(s => s.weight != null && s.reps != null && s.weight > 0 && s.reps > 0)
+    .filter(s => s.weight != null || s.reps != null)
     .map(s => ({ weight: s.weight, reps: s.reps }));
-  if (cleanSets.length === 0) { alert("重量と回数を両方入力したセットが1つ以上必要です"); return; }
   if (d.logId) {
     const i = state.logs.findIndex(l => l.id === d.logId);
     if (i >= 0) {
@@ -1057,7 +1247,7 @@ function renderHistory() {
   });
   BODY_PARTS.forEach(bp => {
     const group = el("optgroup", { label: bp });
-    state.exercises.filter(e => e.bodyPart === bp).forEach(ex => {
+    exercisesByBodyPart(bp).forEach(ex => {
       const opt = el("option", { value: ex.id }, ex.name);
       if (ex.id === state.histExId) opt.setAttribute("selected", "selected");
       group.appendChild(opt);
@@ -1083,8 +1273,11 @@ function renderHistory() {
     [...logs].reverse().forEach(log => {
       const card = el("div", { class: "card" });
       card.appendChild(el("div", { class: "card-title" }, fmtDateJP(log.date)));
-      const txt = log.sets.map((s, i) => `${i + 1}: ${s.weight}kg × ${s.reps}`).join("  /  ");
-      card.appendChild(el("div", { class: "card-sub" }, txt));
+      const txt = log.sets
+        .filter(s => s.weight != null || s.reps != null)
+        .map((s, i) => `${i + 1}: ${s.weight ?? "-"}kg × ${s.reps ?? "-"}`)
+        .join("  /  ");
+      card.appendChild(el("div", { class: "card-sub" }, txt || "セットなし"));
       card.appendChild(el("div", { class: "card-sub", style: "margin-top:4px;" }, `最大 ${maxWeight(log.sets)}kg`));
       if (log.memo) card.appendChild(el("div", { class: "memo", style: "margin-top:6px;" }, log.memo));
       card.appendChild(renderFeedbackBlock(log));
@@ -1118,7 +1311,6 @@ function buildChart(logs) {
   svg.setAttribute("class", "chart");
   svg.setAttribute("preserveAspectRatio", "none");
 
-  // Y grid (3 lines)
   for (let i = 0; i <= 3; i++) {
     const y = P + (i / 3) * innerH;
     const wVal = Math.round(yMax - (i / 3) * yRange);
@@ -1134,7 +1326,6 @@ function buildChart(logs) {
     svg.appendChild(t);
   }
 
-  // Line
   const path = document.createElementNS(svgNS, "polyline");
   path.setAttribute("fill", "none");
   path.setAttribute("stroke", "#e85d1f");
@@ -1142,7 +1333,6 @@ function buildChart(logs) {
   path.setAttribute("points", points.map((p, i) => `${xFor(i)},${yFor(p.w)}`).join(" "));
   svg.appendChild(path);
 
-  // Points + x labels (sparse)
   const labelStep = Math.max(1, Math.ceil(points.length / 6));
   points.forEach((p, i) => {
     const c = document.createElementNS(svgNS, "circle");
@@ -1168,17 +1358,16 @@ function renderExerciseManagement() {
 
   const card = el("div", { class: "card" });
   card.appendChild(el("div", { class: "card-title" }, "種目を追加"));
-  let newBp = BODY_PARTS[0];
-  let newName = "";
-  const bpSel = el("select", { onchange: (e) => { newBp = e.target.value; } });
+  // Bug fix: read DOM values at click time instead of closure variables
+  const bpSel = el("select");
   BODY_PARTS.forEach(bp => bpSel.appendChild(el("option", { value: bp }, bp)));
-  const nameInput = el("input", {
-    type: "text", placeholder: "例: ナロウベンチプレス",
-    oninput: (e) => { newName = e.target.value; },
-  });
+  const nameInput = el("input", { type: "text", placeholder: "例: ナロウベンチプレス" });
   const submitBtn = el("button", { class: "btn btn-primary", onclick: () => {
-    if (!newName.trim()) { alert("種目名を入力してください"); return; }
-    state.exercises.push({ id: uid("ex"), bodyPart: newBp, name: newName.trim(), isDefault: false });
+    const newBp = bpSel.value;
+    const newName = nameInput.value.trim();
+    if (!newName) { alert("種目名を入力してください"); return; }
+    const newOrder = exercisesByBodyPart(newBp).length;
+    state.exercises.push({ id: uid("ex"), bodyPart: newBp, name: newName, isDefault: false, order: newOrder });
     save();
     render();
   } }, "追加");
@@ -1187,17 +1376,59 @@ function renderExerciseManagement() {
   wrap.appendChild(card);
 
   BODY_PARTS.forEach(bp => {
-    const list = state.exercises.filter(e => e.bodyPart === bp);
+    const list = exercisesByBodyPart(bp);
     if (list.length === 0) return;
     const c = el("div", { class: "card" });
     c.appendChild(el("div", { class: "card-title" }, bp));
-    list.forEach(ex => {
+    list.forEach((ex, idx) => {
       const item = el("div", { class: "ex-list-item" });
-      const nameWrap = el("div", null, ex.name);
-      if (ex.isDefault) nameWrap.appendChild(el("span", { class: "badge" }, "デフォルト"));
-      item.appendChild(nameWrap);
-      if (!ex.isDefault) {
-        item.appendChild(el("button", {
+
+      if (state.editingExId === ex.id) {
+        // Edit mode: read DOM value at save time
+        const editInput = el("input", { type: "text", value: ex.name });
+        const saveBtn = el("button", { class: "btn btn-sm btn-primary", onclick: () => {
+          const newName = editInput.value.trim();
+          if (!newName) { alert("種目名を入力してください"); return; }
+          ex.name = newName;
+          save();
+          state.editingExId = null;
+          render();
+        } }, "保存");
+        const cancelBtn = el("button", { class: "btn btn-sm", onclick: () => {
+          state.editingExId = null;
+          render();
+        } }, "キャンセル");
+        item.appendChild(el("div", { class: "ex-list-edit" }, editInput, saveBtn, cancelBtn));
+      } else {
+        // View mode
+        const nameWrap = el("div", null, ex.name);
+        if (ex.isDefault) nameWrap.appendChild(el("span", { class: "badge" }, "デフォルト"));
+        item.appendChild(nameWrap);
+
+        const actions = el("div", { style: "display:flex; gap:4px; align-items:center; flex-shrink:0;" });
+        actions.appendChild(el("button", {
+          class: "btn btn-sm",
+          style: idx === 0 ? "visibility:hidden;" : "",
+          onclick: () => {
+            const prev = list[idx - 1];
+            const tmp = ex.order; ex.order = prev.order; prev.order = tmp;
+            save(); render();
+          },
+        }, "↑"));
+        actions.appendChild(el("button", {
+          class: "btn btn-sm",
+          style: idx === list.length - 1 ? "visibility:hidden;" : "",
+          onclick: () => {
+            const next = list[idx + 1];
+            const tmp = ex.order; ex.order = next.order; next.order = tmp;
+            save(); render();
+          },
+        }, "↓"));
+        actions.appendChild(el("button", {
+          class: "btn btn-sm",
+          onclick: () => { state.editingExId = ex.id; render(); },
+        }, "✎"));
+        actions.appendChild(el("button", {
           class: "btn btn-sm btn-danger",
           onclick: () => {
             const used = state.logs.some(l => l.exerciseId === ex.id);
@@ -1212,6 +1443,7 @@ function renderExerciseManagement() {
             render();
           },
         }, "削除"));
+        item.appendChild(actions);
       }
       c.appendChild(item);
     });
@@ -1303,7 +1535,10 @@ async function fetchAIFeedback(logId) {
     .slice(0, 5);
   const max = maxRecord(log.exerciseId, log.date);
 
-  const fmtSets = (sets) => sets.map((s, i) => `${i+1}: ${s.weight}kg × ${s.reps}回`).join(" / ");
+  const fmtSets = (sets) => sets
+    .filter(s => s.weight != null || s.reps != null)
+    .map((s, i) => `${i+1}: ${s.weight ?? "-"}kg × ${s.reps ?? "-"}回`)
+    .join(" / ") || "セットなし";
   const prompt = `あなたは筋肥大トレーニング指導の専門コーチです。以下の記録を踏まえ、200〜250文字程度で日本語の敬語フィードバックを返してください。
 評価軸:
 - 進捗（前回比、過去MAXとの比較）
@@ -1384,6 +1619,129 @@ function renderFeedbackBlock(log) {
       `エラー: ${state.fbError[log.id]}`));
   }
   return wrap;
+}
+
+// ========== Interval Timer ==========
+function fmtTimer(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function startTimer() {
+  const t = state.timer;
+  if (t.intervalId) clearInterval(t.intervalId);
+  if (t.remaining <= 0) t.remaining = t.duration;
+  t.running = true;
+  t.intervalId = setInterval(() => {
+    t.remaining--;
+    if (t.remaining <= 0) {
+      t.remaining = 0;
+      t.running = false;
+      clearInterval(t.intervalId);
+      t.intervalId = null;
+      notifyTimerEnd();
+      return;
+    }
+    render();
+  }, 1000);
+  render();
+}
+
+function stopTimer() {
+  const t = state.timer;
+  if (t.intervalId) clearInterval(t.intervalId);
+  t.intervalId = null;
+  t.running = false;
+  render();
+}
+
+function resetTimer() {
+  const t = state.timer;
+  if (t.intervalId) clearInterval(t.intervalId);
+  t.intervalId = null;
+  t.running = false;
+  t.remaining = t.duration;
+  render();
+}
+
+function notifyTimerEnd() {
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("インターバル終了", { body: "次のセットを始めましょう！" });
+  } else {
+    alert("インターバル終了！次のセットを始めましょう！");
+  }
+  render();
+}
+
+function renderTimerBox() {
+  const t = state.timer;
+  const box = el("div", { class: "timer-box" });
+  box.appendChild(el("div", { class: "card-sub", style: "font-weight:600; margin-bottom:8px;" }, "インターバルタイマー"));
+
+  // Preset buttons
+  const presetsRow = el("div", { class: "timer-presets" });
+  TIMER_PRESETS.forEach(sec => {
+    const isActive = t.duration === sec && TIMER_PRESETS.includes(t.duration);
+    presetsRow.appendChild(el("button", {
+      class: "timer-preset" + (isActive ? " active" : ""),
+      onclick: () => {
+        t.duration = sec;
+        if (!t.running) t.remaining = sec;
+        render();
+      },
+    }, `${sec}秒`));
+  });
+  box.appendChild(presetsRow);
+
+  // Custom duration input (reads DOM value at click time)
+  const customRow = el("div", { class: "timer-custom-row" });
+  const customInput = el("input", {
+    type: "number", min: "1", max: "3600", inputmode: "numeric",
+    placeholder: "カスタム秒数",
+  });
+  const customBtn = el("button", { class: "btn btn-sm", onclick: () => {
+    const v = parseInt(customInput.value, 10);
+    if (!v || v < 1) { alert("1以上の秒数を入力してください"); return; }
+    t.duration = v;
+    if (!t.running) t.remaining = v;
+    render();
+  } }, "設定");
+  customRow.appendChild(customInput);
+  customRow.appendChild(customBtn);
+  box.appendChild(customRow);
+
+  // Timer display
+  const urgent = t.remaining <= 10 && t.running;
+  box.appendChild(el("div", {
+    class: "timer-display" + (urgent ? " urgent" : ""),
+  }, fmtTimer(t.remaining)));
+
+  // Progress bar
+  const pct = t.duration > 0 ? Math.max(0, Math.min(100, (t.remaining / t.duration) * 100)) : 0;
+  const barWrap = el("div", { class: "timer-bar-wrap" });
+  barWrap.appendChild(el("div", {
+    class: "timer-bar" + (urgent ? " urgent" : ""),
+    style: `width:${pct}%;`,
+  }));
+  box.appendChild(barWrap);
+
+  // Controls
+  const controls = el("div", { class: "timer-controls" });
+  if (t.running) {
+    controls.appendChild(el("button", { class: "btn", onclick: stopTimer }, "⏸ 一時停止"));
+  } else {
+    controls.appendChild(el("button", { class: "btn btn-primary", onclick: () => {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+      startTimer();
+    } }, "▶ スタート"));
+  }
+  controls.appendChild(el("button", { class: "btn", onclick: resetTimer }, "↺ リセット"));
+  box.appendChild(controls);
+
+  return box;
 }
 
 // ========== Render ==========
